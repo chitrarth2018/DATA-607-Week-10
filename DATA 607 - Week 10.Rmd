@@ -1,0 +1,115 @@
+---
+title: "DATA 607 - Week 10"
+author: "Chitrarth Kaushik"
+date: "4/5/2020"
+output:
+  html_document: default
+  word_document: default
+---
+``` {r, eval=TRUE}
+library(tidytext)
+library(textdata)
+
+get_sentiments("afinn")
+get_sentiments("bing")
+get_sentiments("nrc")
+
+library(janeaustenr)
+library(dplyr)
+library(stringr)
+#Please find below the full citation of the base code:
+  
+#The base code has been taken from the book - 'Text Mining with R', Chapter '2 Sentiment analysis with tidy data', sections 2.1 and 2.2
+
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(linenumber = row_number(),
+         chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]", 
+                                                 ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+
+#filtering the joy sentiment from the selected corpus
+
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)
+
+library(tidyr)
+
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+library(ggplot2)
+
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+
+#using lexicon loughran for which i got a reference on this page "https://www.datacamp.com/community/tutorials/sentiment-analysis-R#lexiconsandlyrics"
+
+get_sentiments("loughran")
+
+#selecting a new corpus
+# we are using David Robinson’s gutenbergr package to gather the text of Shakepeare's plays.
+
+library(gutenbergr)
+bardofavon <- gutenberg_works(author == "Shakespeare, William")
+bardofavon
+
+#extracting the play IDs for the plays that we wish to analyse
+
+play_id = bardofavon[c(15,16,17,21,23,24,33,40,56,58),]$gutenberg_id
+play_id
+bardofavon %>% filter(gutenberg_id %in% play_id)
+bardofavon
+
+#downloading the text and storing it in a tibble
+
+bard_plays = gutenberg_download(play_id,meta_fields = "title")
+bard_plays
+
+#analyzing sentiments of the different plays
+
+plays_senti = bard_plays%>%group_by(title)%>%mutate(line = row_number()) %>% unnest_tokens(word, text)%>%inner_join(get_sentiments("loughran"))   # using the loughran lexicon for the analysis
+
+plays_senti
+
+#plotting the evolution of emotions through out the different plays selected
+
+plays_senti %>%
+  # count number of positive and negative words for each chunk of 100 lines
+  count(title, index = line %/% 100, sentiment) %>% 
+  spread(sentiment, n, fill = 0)                %>%                 
+  mutate(sentiment = positive - negative)       %>%
+  ggplot(aes(index, sentiment, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~title,scales = "free_x")
+
+# having read most of the plays selected for the analysis - the sentiment scores evolution doesnt tie up well with my perception for few of the plays. For example, plays such as 'A Midsummer Night's Dream', 'As you like it', 'Much Ado about Nothing' are well accepted comedies. However as per the sentiment score evolution, the scores are mostly seen in the negative zone. Even for plays like 'Merchant of Venice' and 'The Tempest' - they all have a happy ending and such negative scores are not expected
+
+#hence trying the analysis with a different lexicon - nrc
+
+plays_senti1 = bard_plays%>%group_by(title)%>%mutate(line = row_number()) %>% unnest_tokens(word, text)%>%inner_join(get_sentiments("nrc"))   # using the nrc lexicon for the analysis
+
+plays_senti1
+
+plays_senti1 %>%
+  # count number of positive and negative words for each chunk of 100 lines
+  count(title, index = line %/% 100, sentiment) %>% 
+  spread(sentiment, n, fill = 0)                %>%                 
+  mutate(sentiment = positive - negative)       %>%
+  ggplot(aes(index, sentiment, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~title,scales = "free_x")
+
+# There is a signficant change in the sentiment evolution scores for plays such as 'A Midsummer Night's Dream', 'As you like it', 'Much Ado about Nothing' which are well accepted comedies. The sentiments are now in the net positive domain which is in line with the nature of these plays. Point to be noticed here is Macbeth - a world renowned tragedy tends to maintain a sombre sentiment throughout the play with extreme negative emotions seen towards the end of the novel.
+
+```
